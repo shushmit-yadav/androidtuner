@@ -99,7 +99,7 @@ public class DrawableView extends View {
 	private TreeMap<Double, Integer> NotePitchesMap = new TreeMap<Double, Integer>(); 
     
 	private final static int MIN_AMPLITUDE = 40000;
-	private final static int MAX_AMPLITUDE = 6400000;
+	private final static int MAX_AMPLITUDE = 3200000;
 	private final static double MAX_PITCH_DIFF = 20;  // in Hz
 	private final static int UI_UPDATE_MS = 100;
 

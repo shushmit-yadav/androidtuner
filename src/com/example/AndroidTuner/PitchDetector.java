@@ -12,7 +12,9 @@ package com.example.AndroidTuner;
 
 import java.lang.Runnable;
 import java.lang.Thread;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 import com.example.AndroidTuner.AndroidTunerActivity;
 
@@ -60,11 +62,50 @@ public class PitchDetector implements Runnable {
 		System.loadLibrary("fft-jni");
 	}
 
-	private class FreqResult {
+	private static class FreqResult {
 		public HashMap<Double, Double> frequencies;
 		public double best_frequency;
 	}
 
+	public static class FrequencyCluster {
+		public double average_frequency = 0;
+		public double total_amplitude = 0;
+		
+		public void add(double freq, double amplitude) {
+			double new_total_amp = total_amplitude + amplitude;
+			average_frequency = (total_amplitude * average_frequency + freq * amplitude) / new_total_amp;
+			total_amplitude = new_total_amp;
+		}
+		
+		public boolean isNear(double freq) {
+			if (Math.abs(1 - (average_frequency / freq)) < 0.05) {
+				// only 5% difference
+				return true;
+			} else {
+				return false;
+			}
+		}
+		
+		public boolean isHarmonic(double freq) {
+			double harmonic_factor = freq / average_frequency;
+			double distance_from_int = Math.abs(Math.round(harmonic_factor) - harmonic_factor);
+			if (distance_from_int < 0.05) {
+				// only 5% distance
+				return true;
+			} else {
+				return false;
+			}			
+		}
+
+		public void addHarmony(double freq, double amp) {
+			total_amplitude += amp;
+		}
+		
+		@Override public String toString() {
+			return "(" + average_frequency + ", " + total_amplitude + ")";
+		}
+	}
+	
 	public FreqResult AnalyzeFrequencies(short[] audio_data) {
 		FreqResult fr = new FreqResult();
 
@@ -80,16 +121,17 @@ public class PitchDetector implements Runnable {
 		}
 		DoFFT(data, CHUNK_SIZE_IN_SAMPLES);
 
-		// double best_frequency = min_frequency_fft;
-		// HashMap<Double, Double> frequencies = new HashMap<Double, Double>();
+		double best_frequency = min_frequency_fft;
+		HashMap<Double, Double> frequencies = new HashMap<Double, Double>();
 
-		fr.best_frequency = min_frequency_fft;
-		fr.frequencies = new HashMap<Double, Double>();
+		//best_frequency = min_frequency_fft;
+		//fr.frequencies = new HashMap<Double, Double>();
 
 		double best_amplitude = 0;
 		final double draw_frequency_step = 1.0 * RATE / CHUNK_SIZE_IN_SAMPLES;
 		
-		HashMap<Double, Double> best_frequencies = new HashMap<Double, Double>();
+		List<Double> best_frequencies = new ArrayList<Double>();
+		List<Double> best_amps = new ArrayList<Double>();
 		
 		for (int i = min_frequency_fft; i <= max_frequency_fft; i++) {
 
@@ -107,30 +149,83 @@ public class PitchDetector implements Runnable {
 					* Math.pow(MIN_FREQUENCY * MAX_FREQUENCY, 0.5)
 					/ current_frequency;
 
-			Double current_sum_for_this_slot = fr.frequencies
-					.get(draw_frequency);
+			Double current_sum_for_this_slot = frequencies.get(draw_frequency);
 			if (current_sum_for_this_slot == null) {
 				current_sum_for_this_slot = 0.0;
 			}
 
-			fr.frequencies.put(draw_frequency, Math.pow(current_amplitude, 0.5)
+			frequencies.put(draw_frequency, Math.pow(current_amplitude, 0.5)
 					/ draw_frequency_step + current_sum_for_this_slot);
 			
 			if (normalized_amplitude > best_amplitude) {
-				fr.best_frequency = current_frequency;
+				best_frequency = current_frequency;
 				best_amplitude = normalized_amplitude;
 				
-				best_frequencies.put(current_frequency, best_amplitude);
+				best_frequencies.add(current_frequency);
+				best_amps.add(best_amplitude);
 			}
 			// test for harmonics
 			// e.g. 220 is a harmonic of 110, so the harmonic factor is 2.0
 			// and thus the decimal part is 0.0.
 			//		230 isn't a harmonic of 110, the harmonic_factor would be 
 			//		2.09 and 0.09 > 0.05
-			//double harmonic_factor = current_frequency / fr.best_frequency;
+			//double harmonic_factor = current_frequency / best_frequency;
 			//if ((best_amplitude == 0) || (harmonic_factor - Math.floor(harmonic_factor) > 0.05)) {
 		}
 
+		List<FrequencyCluster> clusters = new ArrayList<FrequencyCluster>();
+		FrequencyCluster currentCluster = new FrequencyCluster();
+		clusters.add(currentCluster);
+		FrequencyCluster bestCluster = currentCluster;
+		
+		
+		if (best_frequencies.size() > 0)
+		{
+			currentCluster.add(best_frequencies.get(0), best_amps.get(0));
+		}
+		
+		// join clusters
+		for(int i = 1; i < best_frequencies.size(); i++)
+		{
+			double freq = best_frequencies.get(i);
+			double amp = best_amps.get(i);
+			
+			if (currentCluster.isNear(freq)) {
+				currentCluster.add(freq, amp);
+				continue;
+			}
+			
+			// this isn't near, and isn't harmonic, it's a different one.
+			// NOTE: assuming harmonies are consecutive (no unharmonics in between harmonies)
+			currentCluster = new FrequencyCluster();
+			clusters.add(currentCluster);
+			currentCluster.add(freq, amp);
+		}
+		
+		// join harmonies
+		FrequencyCluster nextCluster;
+		for(int i = 1; i < clusters.size(); i ++) {
+			currentCluster = clusters.get(i - 1);
+			nextCluster = clusters.get(i);
+			if (currentCluster.isHarmonic(nextCluster.average_frequency)) {
+				currentCluster.total_amplitude += nextCluster.total_amplitude;
+			}
+		}
+		
+		
+		best_amplitude = 0;
+		best_frequency = 0;
+		for(int i = 0; i < clusters.size(); i ++) {
+			FrequencyCluster clu = clusters.get(i); 
+			if (best_amplitude < clu.total_amplitude) {
+				best_amplitude = clu.total_amplitude;
+				best_frequency = clu.average_frequency;
+			}
+		}
+
+		fr.best_frequency = best_frequency;
+		fr.frequencies = frequencies;
+		
 		return fr;
 	}
 

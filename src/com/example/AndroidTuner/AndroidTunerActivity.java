@@ -8,13 +8,13 @@
  ** implied warranty.
  */      
 
-package com.example.GuitarTuner;
+package com.example.AndroidTuner;
 
 import java.lang.Thread;
 import java.util.HashMap;
 
-import com.example.GuitarTuner.DrawableView;
-import com.example.GuitarTuner.PitchDetector;
+import com.example.AndroidTuner.DrawableView;
+import com.example.AndroidTuner.PitchDetector;
 
 import android.app.Activity;
 import android.content.pm.ActivityInfo;
@@ -22,7 +22,7 @@ import android.content.res.Configuration;
 import android.os.Bundle;
 import android.os.Handler;
 
-public class GuitarTunerActivity extends Activity {
+public class AndroidTunerActivity extends Activity {
 	/** Called when the activity is first created. */
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
@@ -32,15 +32,15 @@ public class GuitarTunerActivity extends Activity {
 	}
 
 	@Override
-	public void onResume() {
-		super.onResume();
+	public void onStart() {
+		super.onStart();
 		pitch_detector_thread_ = new Thread(new PitchDetector(this, new Handler()));
 		pitch_detector_thread_.start();
 	}
 
 	@Override
-	public void onPause() {
-		super.onPause();
+	public void onStop() {
+		super.onStop();
 		pitch_detector_thread_.interrupt();
 	}
 

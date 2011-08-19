@@ -8,7 +8,7 @@
  ** implied warranty.
  */
 
-package com.example.GuitarTuner;
+package com.example.AndroidTuner;
 
 import android.util.Log;
 

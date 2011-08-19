@@ -8,13 +8,13 @@
  ** implied warranty.
  */
 
-package com.example.GuitarTuner;
+package com.example.AndroidTuner;
 
 import java.lang.Runnable;
 import java.lang.Thread;
 import java.util.HashMap;
 
-import com.example.GuitarTuner.GuitarTunerActivity;
+import com.example.AndroidTuner.AndroidTunerActivity;
 
 import android.app.AlertDialog;
 import android.media.AudioFormat;
@@ -49,13 +49,80 @@ public class PitchDetector implements Runnable {
 
 	public native void DoFFT(double[] data, int size);  // an NDK library 'fft-jni'
 	
-	public PitchDetector(GuitarTunerActivity parent, Handler handler) {
+	public PitchDetector(AndroidTunerActivity parent, Handler handler) {
 		
 		parent_ = parent;
 		handler_ = handler;
         System.loadLibrary("fft-jni");
  	}
 
+	private class FreqResult {
+		public HashMap<Double, Double> frequencies;
+		public double best_frequency;
+	}
+	
+	public FreqResult AnalyzeFrequencies()
+	{
+		FreqResult fr = new FreqResult();
+		
+		short[] audio_data = new short[BUFFER_SIZE_IN_BYTES / 2];
+		double[] data = new double[CHUNK_SIZE_IN_SAMPLES * 2];
+		final int min_frequency_fft = Math.round(MIN_FREQUENCY
+				* CHUNK_SIZE_IN_SAMPLES / RATE);
+		final int max_frequency_fft = Math.round(MAX_FREQUENCY
+				* CHUNK_SIZE_IN_SAMPLES / RATE);
+
+		recorder_.startRecording();
+		recorder_.read(audio_data, 0, CHUNK_SIZE_IN_BYTES / 2);
+		recorder_.stop();
+		
+		for (int i = 0; i < CHUNK_SIZE_IN_SAMPLES; i++) {
+			data[i * 2] = audio_data[i];
+			data[i * 2 + 1] = 0;
+		}
+		DoFFT(data, CHUNK_SIZE_IN_SAMPLES);
+		
+		//double best_frequency = min_frequency_fft;
+		//HashMap<Double, Double> frequencies = new HashMap<Double, Double>();
+		
+		fr.best_frequency = min_frequency_fft;
+		fr.frequencies = new HashMap<Double, Double>();
+		
+		double best_amplitude = 0;
+		final double draw_frequency_step = 1.0 * RATE
+				/ CHUNK_SIZE_IN_SAMPLES;
+		
+		
+		for (int i = min_frequency_fft; i <= max_frequency_fft; i++) {
+			final double current_frequency = i * 1.0 * RATE
+					/ CHUNK_SIZE_IN_SAMPLES;
+			final double draw_frequency = Math
+					.round((current_frequency - MIN_FREQUENCY)
+							/ DRAW_FREQUENCY_STEP)
+					* DRAW_FREQUENCY_STEP + MIN_FREQUENCY;
+			final double current_amplitude = Math.pow(data[i * 2], 2)
+					+ Math.pow(data[i * 2 + 1], 2);
+			final double normalized_amplitude = current_amplitude * 
+			    Math.pow(MIN_FREQUENCY * MAX_FREQUENCY, 0.5) / current_frequency;
+			
+			Double current_sum_for_this_slot = fr.frequencies.get(draw_frequency);
+			if (current_sum_for_this_slot == null) {
+				current_sum_for_this_slot = 0.0;
+			}
+			
+			fr.frequencies.put(draw_frequency, Math
+					.pow(current_amplitude, 0.5)
+					/ draw_frequency_step + current_sum_for_this_slot);
+			if (normalized_amplitude > best_amplitude) {
+				fr.best_frequency = current_frequency;
+				best_amplitude = normalized_amplitude;
+			}
+		}
+		
+		
+		return fr;
+	}
+	
 	public void run()
 	{
 		Log.e(LOG_TAG, "starting to detect pitch");	
@@ -69,56 +136,10 @@ public class PitchDetector implements Runnable {
 			return;
 		}
 		
-		short[] audio_data = new short[BUFFER_SIZE_IN_BYTES / 2];
-		double[] data = new double[CHUNK_SIZE_IN_SAMPLES * 2];
-		final int min_frequency_fft = Math.round(MIN_FREQUENCY
-				* CHUNK_SIZE_IN_SAMPLES / RATE);
-		final int max_frequency_fft = Math.round(MAX_FREQUENCY
-				* CHUNK_SIZE_IN_SAMPLES / RATE);
 		
 		while (!Thread.interrupted()) {
-			recorder_.startRecording();
-			recorder_.read(audio_data, 0, CHUNK_SIZE_IN_BYTES / 2);
-			recorder_.stop();
-			
-			for (int i = 0; i < CHUNK_SIZE_IN_SAMPLES; i++) {
-				data[i * 2] = audio_data[i];
-				data[i * 2 + 1] = 0;
-			}
-			DoFFT(data, CHUNK_SIZE_IN_SAMPLES);
-			
-			double best_frequency = min_frequency_fft;
-			double best_amplitude = 0;
-			HashMap<Double, Double> frequencies = new HashMap<Double, Double>();
-			final double draw_frequency_step = 1.0 * RATE
-					/ CHUNK_SIZE_IN_SAMPLES;
-			
-			
-			for (int i = min_frequency_fft; i <= max_frequency_fft; i++) {
-				final double current_frequency = i * 1.0 * RATE
-						/ CHUNK_SIZE_IN_SAMPLES;
-				final double draw_frequency = Math
-						.round((current_frequency - MIN_FREQUENCY)
-								/ DRAW_FREQUENCY_STEP)
-						* DRAW_FREQUENCY_STEP + MIN_FREQUENCY;
-				final double current_amplitude = Math.pow(data[i * 2], 2)
-						+ Math.pow(data[i * 2 + 1], 2);
-				final double normalized_amplitude = current_amplitude * 
-				    Math.pow(MIN_FREQUENCY * MAX_FREQUENCY, 0.5) / current_frequency; 
-				Double current_sum_for_this_slot = frequencies
-						.get(draw_frequency);
-				if (current_sum_for_this_slot == null)
-					current_sum_for_this_slot = 0.0;
-				frequencies.put(draw_frequency, Math
-						.pow(current_amplitude, 0.5)
-						/ draw_frequency_step + current_sum_for_this_slot);
-				if (normalized_amplitude > best_amplitude) {
-					best_frequency = current_frequency;
-					best_amplitude = normalized_amplitude;
-				}
-			}
-			
- 			PostToUI(frequencies, best_frequency);
+			FreqResult fr = AnalyzeFrequencies();
+ 			PostToUI(fr.frequencies, fr.best_frequency);
 		}
 	}
 
@@ -145,7 +166,7 @@ public class PitchDetector implements Runnable {
 	    });
 	}
 
-	private GuitarTunerActivity parent_;
+	private AndroidTunerActivity parent_;
 	private AudioRecord recorder_;
 	private Handler handler_;
 }

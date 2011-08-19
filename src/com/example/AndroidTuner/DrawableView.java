@@ -8,7 +8,7 @@
  ** implied warranty.
  */
 
-package com.example.GuitarTuner;
+package com.example.AndroidTuner;
 
 import java.util.HashMap;
 import java.util.Iterator;
@@ -26,7 +26,7 @@ import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 
-import com.example.GuitarTuner.PitchDetectionRepresentation;
+import com.example.AndroidTuner.PitchDetectionRepresentation;
 
 public class DrawableView extends View {
 

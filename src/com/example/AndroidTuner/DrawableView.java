@@ -29,6 +29,12 @@ import android.graphics.Rect;
 import com.example.AndroidTuner.PitchDetectionRepresentation;
 
 public class DrawableView extends View {
+	
+	private HashMap<Double, Double> frequencies_;
+	private double pitch_;
+	private PitchDetectionRepresentation representation_;
+	private Handler handler_;
+	private Timer timer_;
 
 	public DrawableView(Context context) {
 		super(context);
@@ -163,9 +169,16 @@ public class DrawableView extends View {
 	
 	private void DrawPitchOnFingerboard(Canvas canvas, Rect rect, Point text_point) {
 		final int MARK_RADIUS = 5;
-		if (representation_ == null || !representation_.string_detected) return;
+		if (representation_ == null || !representation_.string_detected) {
+			return;
+		}
+		
 		final int alpha = representation_.GetAlpha();
-		if (alpha == 0) return;
+		
+		if (alpha == 0) {
+			return;
+		}
+		
 		int string_no = representation_.string_no;
 		int fret = representation_.fret;
 		
@@ -258,7 +271,8 @@ public class DrawableView extends View {
 		Paint paint = new Paint();
 		paint.setARGB(alpha, 200, 0, 0);
 		paint.setTextSize(35);
-		canvas.drawText(Math.random() + Math.round(representation_.pitch * 10) / 10.0 + " Hz", 20, 40, paint);
+		
+		canvas.drawText(Math.round(representation_.pitch * 10) / 10.0 + " Hz", 20, 40, paint);
 	}
 	
 	protected void onDraw(Canvas canvas) {
@@ -296,9 +310,4 @@ public class DrawableView extends View {
 		pitch_ = pitch;
 	}
 
-	private HashMap<Double, Double> frequencies_;
-	private double pitch_;
-	private PitchDetectionRepresentation representation_;
-	private Handler handler_;
-	private Timer timer_;
 }

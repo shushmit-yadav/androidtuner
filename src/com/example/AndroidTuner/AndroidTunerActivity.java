@@ -23,11 +23,16 @@ import android.os.Bundle;
 import android.os.Handler;
 
 public class AndroidTunerActivity extends Activity {
+	
+	public DrawableView tv_;
+	Thread pitch_detector_thread_;
+	
 	/** Called when the activity is first created. */
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		tv_ = new DrawableView(this);
+		//setContentView(R.layout.main);
 		setContentView(tv_);
 	}
 
@@ -55,7 +60,4 @@ public class AndroidTunerActivity extends Activity {
 			final double pitch) {
 		tv_.setDetectionResults(frequencies, pitch);
 	}
-
-	DrawableView tv_;
-	Thread pitch_detector_thread_;
 }

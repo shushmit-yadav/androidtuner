@@ -25,7 +25,8 @@ import android.os.Handler;
 public class AndroidTunerActivity extends Activity {
 	
 	public DrawableView tv_;
-	Thread pitch_detector_thread_;
+	public Thread pitch_detector_thread_;
+	public PitchDetector pd_;
 	
 	/** Called when the activity is first created. */
 	@Override
@@ -39,7 +40,8 @@ public class AndroidTunerActivity extends Activity {
 	@Override
 	public void onStart() {
 		super.onStart();
-		pitch_detector_thread_ = new Thread(new PitchDetector(this, new Handler()));
+		pd_ = new PitchDetector(this, new Handler());
+		pitch_detector_thread_ = new Thread(pd_);
 		pitch_detector_thread_.start();
 	}
 

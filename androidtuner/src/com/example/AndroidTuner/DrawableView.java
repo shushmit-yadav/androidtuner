@@ -272,7 +272,7 @@ public class DrawableView extends View {
 		paint.setARGB(alpha, 200, 0, 0);
 		paint.setTextSize(35);
 		
-		canvas.drawText(Math.round(representation_.pitch * 10) / 10.0 + " Hz", 20, 40, paint);
+		canvas.drawText(Math.round(representation_.pitch * 10) / 10.0 + " Hz " + PitchDetector.HzToNote(representation_.pitch), 20, 40, paint);
 	}
 	
 	protected void onDraw(Canvas canvas) {

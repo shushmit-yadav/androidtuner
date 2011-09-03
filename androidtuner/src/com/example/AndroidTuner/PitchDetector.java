@@ -52,7 +52,7 @@ public class PitchDetector implements Runnable {
 
 	private final static int DRAW_FREQUENCY_STEP = 5;
 
-	public native void DoFFT(double[] data, int size); // an NDK library
+	public static native void DoFFT(double[] data, int size); // an NDK library
 														// 'fft-jni'
 
 	public PitchDetector(AndroidTunerActivity parent, Handler handler) {
@@ -62,9 +62,13 @@ public class PitchDetector implements Runnable {
 		System.loadLibrary("fft-jni");
 	}
 
-	private static class FreqResult {
+	public static class FreqResult {
 		public HashMap<Double, Double> frequencies;
 		public double best_frequency;
+		
+		@Override public String toString() {
+			return "<FreqResult: " + best_frequency + " Hz>";
+		}
 	}
 
 	public static class FrequencyCluster {
@@ -106,20 +110,32 @@ public class PitchDetector implements Runnable {
 		}
 	}
 	
-	public FreqResult AnalyzeFrequencies(short[] audio_data) {
+	public static FreqResult AnalyzeFrequencies(short[] audio_data) {
 		FreqResult fr = new FreqResult();
 
-		double[] data = new double[CHUNK_SIZE_IN_SAMPLES * 2];
-		final int min_frequency_fft = Math.round(MIN_FREQUENCY
-				* CHUNK_SIZE_IN_SAMPLES / RATE);
-		final int max_frequency_fft = Math.round(MAX_FREQUENCY
-				* CHUNK_SIZE_IN_SAMPLES / RATE);
+		//double[] data = new double[CHUNK_SIZE_IN_SAMPLES * 2];
+		if (audio_data.length * 2 < 0) {
+			Log.e(LOG_TAG, "fail");
+		}
+		
+		double[] data = new double[audio_data.length * 2];
+		
+		//final int min_frequency_fft = Math.round(MIN_FREQUENCY * CHUNK_SIZE_IN_SAMPLES / RATE);
+		//final int max_frequency_fft = Math.round(MAX_FREQUENCY * CHUNK_SIZE_IN_SAMPLES / RATE);
+		final int min_frequency_fft = Math.round(MIN_FREQUENCY * audio_data.length / RATE);
+		final int max_frequency_fft = Math.round(MAX_FREQUENCY * audio_data.length / RATE);
 
-		for (int i = 0; i < CHUNK_SIZE_IN_SAMPLES; i++) {
+		
+		// TODO: Somewhere in this for loop there's a crash!
+		//for (int i = 0; i < CHUNK_SIZE_IN_SAMPLES; i++) {
+		for (int i = 0; i < audio_data.length; i++) {
 			data[i * 2] = audio_data[i];
 			data[i * 2 + 1] = 0;
 		}
-		DoFFT(data, CHUNK_SIZE_IN_SAMPLES);
+		
+		//DoFFT(data, CHUNK_SIZE_IN_SAMPLES);
+		DoFFT(data, audio_data.length);
+		
 
 		double best_frequency = min_frequency_fft;
 		HashMap<Double, Double> frequencies = new HashMap<Double, Double>();
@@ -176,7 +192,6 @@ public class PitchDetector implements Runnable {
 		List<FrequencyCluster> clusters = new ArrayList<FrequencyCluster>();
 		FrequencyCluster currentCluster = new FrequencyCluster();
 		clusters.add(currentCluster);
-		FrequencyCluster bestCluster = currentCluster;
 		
 		
 		if (best_frequencies.size() > 0)
@@ -212,7 +227,7 @@ public class PitchDetector implements Runnable {
 			}
 		}
 		
-		
+		// find best cluster
 		best_amplitude = 0;
 		best_frequency = 0;
 		for(int i = 0; i < clusters.size(); i ++) {
@@ -243,15 +258,32 @@ public class PitchDetector implements Runnable {
 
 		recorder_.startRecording();
 		while (!Thread.interrupted()) {
-			short[] audio_data = new short[BUFFER_SIZE_IN_BYTES / 2];
-			recorder_.read(audio_data, 0, CHUNK_SIZE_IN_BYTES / 2);
+			//short[] audio_data = new short[BUFFER_SIZE_IN_BYTES / 2];
+			//recorder_.read(audio_data, 0, CHUNK_SIZE_IN_BYTES / 2);
+			short[] audio_data = new short[CHUNK_SIZE_IN_BYTES / 2];
+			recorder_.read(audio_data, 0, audio_data.length);
 			FreqResult fr = AnalyzeFrequencies(audio_data);
 			PostToUI(fr.frequencies, fr.best_frequency);
 		}
 		recorder_.stop();
 	}
 
-	private void PostToUI(final HashMap<Double, Double> frequencies,
+	public static String HzToNote(double frequency) {
+		// distance in half-steps
+		double distanceFromA4 = Math.log(frequency / 440) * 12 / Math.log(2);
+		String[] notes = {"a", "a#", "b", "c", "c#", "d", "d#", "e", "f", "f#", "g", "g#"};
+		int noteIndex = (int) (Math.round(distanceFromA4) % 12);
+		// 440 Hz is A4 and there are 9 half-steps from C4 to A4
+		long octaveNumber = 4 + (long) Math.floor( (9.0 + Math.round(distanceFromA4)) / 12.0);
+		if (noteIndex < 0) {
+			// to avoid negative noteindex
+			noteIndex += 12;
+		}
+		
+		return notes[noteIndex] + octaveNumber;
+	}
+	
+	public void PostToUI(final HashMap<Double, Double> frequencies,
 			final double pitch) {
 		handler_.post(new Runnable() {
 			public void run() {

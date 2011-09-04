@@ -71,7 +71,7 @@ public class AndroidTunerTest extends
 				}
 				FreqResult fr = PitchDetector.AnalyzeFrequencies(data);
 				Log.e(LOG_TAG, "detected pitch " + fr);
-				mActivity.pd_.PostToUI(fr.frequencies, fr.best_frequency);
+				mActivity.gpl_.PostToUI(fr.frequencies, fr.best_frequency);
 			}
 		}
 		catch (EOFException e) {

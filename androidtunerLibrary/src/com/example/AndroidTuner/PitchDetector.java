@@ -16,8 +16,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-import com.example.AndroidTuner.AndroidTunerActivity;
-
 import android.app.AlertDialog;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
@@ -28,6 +26,10 @@ import android.util.Log;
 public class PitchDetector implements Runnable {
 	private static String LOG_TAG = "PitchDetector";
 
+	private AudioRecord recorder_;
+	
+	private PitchListener pcl;
+	
 	// Currently, only this combination of rate, encoding and channel mode
 	// actually works.
 	private final static int RATE = 8000;
@@ -57,10 +59,13 @@ public class PitchDetector implements Runnable {
 	public static native void DoFFT(double[] data, int size); // an NDK library
 														// 'fft-jni'
 
-	public PitchDetector(AndroidTunerActivity parent, Handler handler) {
-
-		parent_ = parent;
-		handler_ = handler;
+	public interface PitchListener{
+		public void onAnalysis(FreqResult fr);
+		public void onError(String error);
+	}
+	
+	public PitchDetector(PitchListener pcl) {
+		this.pcl = pcl;
 		System.loadLibrary("fft-jni");
 	}
 
@@ -255,7 +260,7 @@ public class PitchDetector implements Runnable {
 		recorder_ = new AudioRecord(AudioSource.MIC, RATE, CHANNEL_MODE,
 				ENCODING, 6144);
 		if (recorder_.getState() != AudioRecord.STATE_INITIALIZED) {
-			ShowError("Can't initialize AudioRecord");
+			this.pcl.onError("Can't initialize AudioRecord");
 			return;
 		}
 
@@ -266,7 +271,8 @@ public class PitchDetector implements Runnable {
 			short[] audio_data = new short[CHUNK_SIZE_IN_BYTES / 2];
 			recorder_.read(audio_data, 0, audio_data.length);
 			FreqResult fr = AnalyzeFrequencies(audio_data);
-			PostToUI(fr.frequencies, fr.best_frequency);
+			this.pcl.onAnalysis(fr);
+			//PostToUI(fr.frequencies, fr.best_frequency);
 		}
 		recorder_.stop();
 	}
@@ -292,26 +298,4 @@ public class PitchDetector implements Runnable {
 		double distanceFromA4 = distanceFromA4(frequency);
 		return distanceFromA4ToNote(distanceFromA4);
 	}
-	
-	public void PostToUI(final HashMap<Double, Double> frequencies,
-			final double pitch) {
-		handler_.post(new Runnable() {
-			public void run() {
-				parent_.ShowPitchDetectionResult(frequencies, pitch);
-			}
-		});
-	}
-
-	private void ShowError(final String msg) {
-		handler_.post(new Runnable() {
-			public void run() {
-				new AlertDialog.Builder(parent_).setTitle("GuitarTuner")
-						.setMessage(msg).show();
-			}
-		});
-	}
-
-	private AndroidTunerActivity parent_;
-	private AudioRecord recorder_;
-	private Handler handler_;
 }

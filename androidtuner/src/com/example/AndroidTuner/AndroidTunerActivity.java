@@ -15,8 +15,10 @@ import java.util.HashMap;
 
 import com.example.AndroidTuner.DrawableView;
 import com.example.AndroidTuner.PitchDetector;
+import com.example.AndroidTuner.PitchDetector.FreqResult;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
 import android.os.Bundle;
@@ -27,6 +29,7 @@ public class AndroidTunerActivity extends Activity {
 	public DrawableView tv_;
 	public Thread pitch_detector_thread_;
 	public PitchDetector pd_;
+	public GuiPitchListener gpl_;
 	
 	/** Called when the activity is first created. */
 	@Override
@@ -37,10 +40,51 @@ public class AndroidTunerActivity extends Activity {
 		setContentView(tv_);
 	}
 
+	public class GuiPitchListener implements PitchDetector.PitchListener {
+		private AndroidTunerActivity parent_;
+		private Handler handler_;
+		
+		public GuiPitchListener(AndroidTunerActivity parent, Handler handler) {
+			parent_ = parent;
+			handler_ = handler;			
+		}
+		
+		public void PostToUI(final HashMap<Double, Double> frequencies,
+				final double pitch) {
+			handler_.post(new Runnable() {
+				public void run() {
+					parent_.ShowPitchDetectionResult(frequencies, pitch);
+				}
+			});
+		}
+
+		private void ShowError(final String msg) {
+			handler_.post(new Runnable() {
+				public void run() {
+					new AlertDialog.Builder(parent_).setTitle("GuitarTuner")
+							.setMessage(msg).show();
+				}
+			});
+		}
+
+		@Override
+		public void onAnalysis(FreqResult fr) {
+			// TODO Auto-generated method stub
+			PostToUI(fr.frequencies, fr.best_frequency);
+		}
+
+		@Override
+		public void onError(String error) {
+			// TODO Auto-generated method stub
+			ShowError(error);
+		}
+	}
+	
 	@Override
 	public void onStart() {
 		super.onStart();
-		pd_ = new PitchDetector(this, new Handler());
+		gpl_ = new GuiPitchListener(this, new Handler());
+		pd_ = new PitchDetector(gpl_);
 		pitch_detector_thread_ = new Thread(pd_);
 		pitch_detector_thread_.start();
 	}

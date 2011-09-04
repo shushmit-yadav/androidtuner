@@ -19,6 +19,7 @@ import java.util.TreeMap;
 import java.util.Map.Entry;
 
 import android.os.Handler;
+import android.os.SystemClock;
 import android.view.View;
 import android.content.Context;
 import android.graphics.Canvas;
@@ -32,51 +33,13 @@ public class DrawableView extends View {
 	
 	private HashMap<Double, Double> frequencies_;
 	private double pitch_;
-	private PitchDetectionRepresentation representation_;
+	//private PitchDetectionRepresentation representation_;
 	private Handler handler_;
 	private Timer timer_;
-
+	
 	public DrawableView(Context context) {
 		super(context);
 		
-		NotePitches[0][0] = 82.41;
-		NotePitches[0][1] = 87.31;
-		NotePitches[0][2] = 92.5;
-		NotePitches[0][3] = 98;
-		NotePitches[0][4] = 103.8;
-		NotePitches[1][0] = 110;
-		NotePitches[1][1] = 116.54;
-		NotePitches[1][2] = 123.48;
-		NotePitches[1][3] = 130.82;
-		NotePitches[1][4] = 138.59;
-		NotePitches[2][0] = 147.83;
-		NotePitches[2][1] = 155.56;
-		NotePitches[2][2] = 164.81;
-		NotePitches[2][3] = 174.62;
-		NotePitches[2][4] = 185;
-		NotePitches[3][0] = 196;
-		NotePitches[3][1] = 207;
-		NotePitches[3][2] = 220;
-		NotePitches[3][3] = 233.08;
-		NotePitches[4][0] = 246.96;
-		NotePitches[4][1] = 261.63;
-		NotePitches[4][2] = 277.18;
-		NotePitches[4][3] = 293.66;
-		NotePitches[4][4] = 311.13;
-		NotePitches[5][0] = 329.63;
-		NotePitches[5][1] = 349.23;
-		NotePitches[5][2] = 369.99;
-		NotePitches[5][3] = 392;
-		NotePitches[5][4] = 415.3;
-		NotePitches[5][5] = 440;
-		
-		for (int string_no = 0; string_no < 6; string_no++) {
-			for (int fret = 0; fret < 6; fret++) {
-				if (NotePitches[string_no][fret] > 0) {
-				  NotePitchesMap.put(NotePitches[string_no][fret], string_no * 100 + fret);  // encode coordinates
-				}
-			}
-		}
 		
 		// UI update cycle.
 		handler_ = new Handler();
@@ -167,61 +130,12 @@ public class DrawableView extends View {
 		return Math.round(amplitude / MAX_AMPLITUDE * histogram_rect.height());
 	}
 	
-	private void DrawPitchOnFingerboard(Canvas canvas, Rect rect, Point text_point) {
-		final int MARK_RADIUS = 5;
-		if (representation_ == null || !representation_.string_detected) {
-			return;
-		}
-		
-		final int alpha = representation_.GetAlpha();
-		
-		if (alpha == 0) {
-			return;
-		}
-		
-		int string_no = representation_.string_no;
-		int fret = representation_.fret;
-		
-		Paint paint = new Paint();
-		paint.setARGB(alpha, 200, 210, 210);
-		if (fret == 0) {
-			// Highlight the string.
-			final int offset = Math.round((rect.height() - FINGERBOARD_PADDING * 2) / 5 * string_no) + FINGERBOARD_PADDING;
-			canvas.drawLine(rect.left, rect.top + offset, rect.right, rect.top + offset, paint);
-			// Actually use the corresponding coordinate on the previous string.
-			if (string_no > 0) {
-				if (string_no == 4) {
-					fret = 4;
-				} else {
-					fret = 5;
-				} 
-				string_no--;
-			}
-		}
-		
-		// Draw the needed position on the fingerboard.
-		final long offset_y = Math.round((rect.height() - FINGERBOARD_PADDING * 2) / 5 * string_no) + FINGERBOARD_PADDING;
-		final long offset_x = Math.round((rect.width() - FINGERBOARD_PADDING * 2) 
-				/ 5 * (fret - 0.5)) + FINGERBOARD_PADDING;
-		final long circle_x = rect.right - offset_x;
-		final long circle_y = rect.top + offset_y;
-		canvas.drawCircle(circle_x, circle_y, MARK_RADIUS, paint);
-		
-		// Draw the position's pitch and the delta.
-		paint.setARGB(alpha, 180, 180, 180);
-		canvas.drawLine(text_point.x, text_point.y, text_point.x + 20, text_point.y, paint);
-		canvas.drawLine(text_point.x, text_point.y, circle_x, circle_y, paint);
-		paint.setTextSize(25);
-		final double position_pitch = NotePitches[representation_.string_no][representation_.fret];
-		final double delta = representation_.pitch - position_pitch;
-		String message = position_pitch + " Hz (";
-		message += delta > 0 ? "-" : "+";
-		message += Math.round(Math.abs(delta) * 100) / 100.0 + "Hz)"; 
-		canvas.drawText(message, text_point.x + 30, text_point.y + 10, paint);
-	}
 
 	private boolean DrawHistogram(Canvas canvas, Rect rect) {
-		if (frequencies_ == null) return false;
+		if (frequencies_ == null) {
+			return false;
+		}
+		
 		Paint paint = new Paint();
 		// Draw border.
 		paint.setARGB(80, 200, 200, 200);
@@ -258,21 +172,14 @@ public class DrawableView extends View {
 		return above_threshold;
 	}
 
-	private void DrawCurrentFrequency(Canvas canvas, int x, int y) {
-		if (representation_ == null) {
-			Paint paint = new Paint();
-			paint.setARGB(255, 200, 200, 200);
-			paint.setTextSize(18);
-			canvas.drawText("Pull a string on your guitar.", 20, 40, paint);
-			return;
-		}
-		final int alpha = representation_.GetAlpha();
-		if (alpha == 0) return;
+	private void DrawCurrentFrequency(Canvas canvas, int x, int y, double pitch) {
+		final int alpha = 255;
 		Paint paint = new Paint();
 		paint.setARGB(alpha, 200, 0, 0);
 		paint.setTextSize(35);
-		
-		canvas.drawText(Math.round(representation_.pitch * 10) / 10.0 + " Hz " + PitchDetector.HzToNote(representation_.pitch), 20, 40, paint);
+		final double pitchLessAccurate = Math.round(pitch * 10) / 10.0;
+		canvas.drawText(pitchLessAccurate + " Hz ", 20, 40, paint);
+		canvas.drawText(PitchDetector.HzToNote(pitch), 20, 80, paint);
 	}
 	
 	protected void onDraw(Canvas canvas) {
@@ -280,29 +187,51 @@ public class DrawableView extends View {
 		final int effective_height = canvas.getHeight() - 4 * MARGIN;
 		final int effective_width = canvas.getWidth() - 2 * MARGIN;
 		
-		final Rect fingerboard = new Rect(MARGIN, 
-				                          effective_height * 20 / 100 + MARGIN + HEADSTOCK_HEIGHT,
-				                          effective_width + MARGIN - HEADSTOCK_WIDTH, 
-				                          effective_height * 60 / 100 + MARGIN - HEADSTOCK_HEIGHT);
 		final Rect histogram = new Rect(MARGIN, effective_height * 60 / 100 + 2 * MARGIN,
                 effective_width + MARGIN, effective_height + MARGIN);
 		
 		if (DrawHistogram(canvas, histogram)) {
-			final int coord = GetFingerboardCoord(pitch_);
-			final int string_no = coord / 100;
-			final int fret = coord % 100;
-			final double found_pitch = NotePitches[string_no][fret];
-			final double diff = Math.abs(found_pitch - pitch_);
-			if (diff < MAX_PITCH_DIFF) {
-				representation_ = new PitchDetectionRepresentation(pitch_, string_no, fret);
-			} else {
-				representation_ = new PitchDetectionRepresentation(pitch_);
-			}
+			// detected pitch
 		}
 		
-		DrawCurrentFrequency(canvas, 20, 50);
-		//DrawFingerboard(canvas, fingerboard);
-		//DrawPitchOnFingerboard(canvas, fingerboard, new Point(20, 80));
+		DrawCurrentFrequency(canvas, 20, 50, pitch_);
+		DrawPitchPrecision(canvas, pitch_);
+		
+	}
+
+	private void DrawPitchPrecision(Canvas canvas, double pitch) {
+		if (pitch == 0.0) {
+			return;
+		}
+		
+		Paint notePaint = new Paint();
+		final double distanceFromA4 = PitchDetector.distanceFromA4(pitch);
+		final double pitchMistake = distanceFromA4 - Math.round(distanceFromA4);
+		final int pitchMistakeColor = (int) (Math.abs(pitchMistake) * 500); // pitchMistake is -0.5 - 0.5, so color is 0 - 250.
+		final int tuneNeedleY = 150;
+		final int tuneHairRadius = 20;
+		
+		if (pitchMistake > 0) {
+			// reddish
+			notePaint.setARGB(180, pitchMistakeColor, 250 - pitchMistakeColor, 30);
+		} else {
+			// blueish
+			notePaint.setARGB(180, 30, 250 - pitchMistakeColor, pitchMistakeColor);
+		}
+		
+		final int width = canvas.getWidth();
+		final int centerX = width / 2;
+		
+		float posX = (float) (width * (0.5 + pitchMistake));
+		
+		// hair
+		canvas.drawLine(centerX, tuneNeedleY - tuneHairRadius, centerX, tuneNeedleY + tuneHairRadius, notePaint);
+		
+		// horizontal line
+		canvas.drawLine(0, tuneNeedleY, width, tuneNeedleY, notePaint);
+		
+		// needle
+		canvas.drawCircle(posX, tuneNeedleY, 5, notePaint);
 	}
 
 	public void setDetectionResults(final HashMap<Double, Double> frequencies, double pitch) {

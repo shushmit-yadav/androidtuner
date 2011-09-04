@@ -52,6 +52,8 @@ public class PitchDetector implements Runnable {
 
 	private final static int DRAW_FREQUENCY_STEP = 5;
 
+	public final static String[] notes = {"a", "a#", "b", "c", "c#", "d", "d#", "e", "f", "f#", "g", "g#"};
+	
 	public static native void DoFFT(double[] data, int size); // an NDK library
 														// 'fft-jni'
 
@@ -115,7 +117,7 @@ public class PitchDetector implements Runnable {
 
 		//double[] data = new double[CHUNK_SIZE_IN_SAMPLES * 2];
 		if (audio_data.length * 2 < 0) {
-			Log.e(LOG_TAG, "fail");
+			Log.e(LOG_TAG, "awkward fail");
 		}
 		
 		double[] data = new double[audio_data.length * 2];
@@ -137,7 +139,8 @@ public class PitchDetector implements Runnable {
 		DoFFT(data, audio_data.length);
 		
 
-		double best_frequency = min_frequency_fft;
+		//double best_frequency = min_frequency_fft;
+		double best_frequency = 0;
 		HashMap<Double, Double> frequencies = new HashMap<Double, Double>();
 
 		//best_frequency = min_frequency_fft;
@@ -268,10 +271,11 @@ public class PitchDetector implements Runnable {
 		recorder_.stop();
 	}
 
-	public static String HzToNote(double frequency) {
-		// distance in half-steps
-		double distanceFromA4 = Math.log(frequency / 440) * 12 / Math.log(2);
-		String[] notes = {"a", "a#", "b", "c", "c#", "d", "d#", "e", "f", "f#", "g", "g#"};
+	public static double distanceFromA4(double frequency) {
+		return Math.log(frequency / 440) * 12 / Math.log(2);
+	}
+	
+	public static String distanceFromA4ToNote(double distanceFromA4) {
 		int noteIndex = (int) (Math.round(distanceFromA4) % 12);
 		// 440 Hz is A4 and there are 9 half-steps from C4 to A4
 		long octaveNumber = 4 + (long) Math.floor( (9.0 + Math.round(distanceFromA4)) / 12.0);
@@ -281,6 +285,12 @@ public class PitchDetector implements Runnable {
 		}
 		
 		return notes[noteIndex] + octaveNumber;
+	}
+	
+	public static String HzToNote(double frequency) {
+		// distance in half-steps
+		double distanceFromA4 = distanceFromA4(frequency);
+		return distanceFromA4ToNote(distanceFromA4);
 	}
 	
 	public void PostToUI(final HashMap<Double, Double> frequencies,

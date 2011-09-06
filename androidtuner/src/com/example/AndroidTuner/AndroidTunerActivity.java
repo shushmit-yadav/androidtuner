@@ -35,9 +35,12 @@ public class AndroidTunerActivity extends Activity {
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		tv_ = new DrawableView(this);
-		//setContentView(R.layout.main);
-		setContentView(tv_);
+		setContentView(R.layout.main);
+		tv_ = (DrawableView) findViewById(R.id.drawview);
+		
+		// manually invoking the view and thus ignoring layout/main.xml
+		//tv_ = new DrawableView(this);
+		//setContentView(tv_);
 	}
 
 	public class GuiPitchListener implements PitchDetector.PitchListener {
@@ -49,11 +52,10 @@ public class AndroidTunerActivity extends Activity {
 			handler_ = handler;			
 		}
 		
-		public void PostToUI(final HashMap<Double, Double> frequencies,
-				final double pitch) {
+		public void PostToUI(final FreqResult fr) {
 			handler_.post(new Runnable() {
 				public void run() {
-					parent_.ShowPitchDetectionResult(frequencies, pitch);
+					parent_.ShowPitchDetectionResult(fr);
 				}
 			});
 		}
@@ -70,7 +72,7 @@ public class AndroidTunerActivity extends Activity {
 		@Override
 		public void onAnalysis(FreqResult fr) {
 			// TODO Auto-generated method stub
-			PostToUI(fr.frequencies, fr.best_frequency);
+			PostToUI(fr);
 		}
 
 		@Override
@@ -101,9 +103,7 @@ public class AndroidTunerActivity extends Activity {
 	    setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
 	}
 	
-	public void ShowPitchDetectionResult(
-			final HashMap<Double, Double> frequencies,
-			final double pitch) {
-		tv_.setDetectionResults(frequencies, pitch);
+	public void ShowPitchDetectionResult(FreqResult fr) {
+		tv_.setDetectionResults(fr);
 	}
 }

@@ -4,10 +4,9 @@
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
     >
-<TextView  
-	android:id="@+id/textview"
+<com.example.AndroidTuner.DrawableView
+	android:id="@+id/drawview"
     android:layout_width="fill_parent" 
     android:layout_height="wrap_content" 
-    android:text="@string/hello"
-    />
+	/>
 </LinearLayout>

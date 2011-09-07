@@ -24,8 +24,15 @@ template<class T> inline void swap(T &x, T&y) {
 	z = x; x = y; y = z;
 }
 
-// Taken from http://www.ddj.com/cpp/199500857
+// Taken from http://www.ddj.com/cpp/199500857, nowadays the link is http://drdobbs.com/cpp/199500857
 // which took it from Numerical Recipes in C++, p.513
+// which can be found at http://www.mathcs.org/java/programs/FFT/FFTInfo/c12-2.pdf
+//
+/*
+ * The initial signal is stored in the array data of length 2*nn, where each
+ * even element corresponds to the real part and each odd element to the
+ * imaginary part of a complex number.
+ */
 void DoFFTInternal(jdouble* data, jint nn) {
 	unsigned long n, mmax, m, j, istep, i;
 	jdouble wtemp, wr, wpr, wpi, wi, theta;
@@ -61,8 +68,8 @@ void DoFFTInternal(jdouble* data, jint nn) {
 		for (m=1; m < mmax; m += 2) {
 			for (i=m; i <= n; i += istep) {
 				j=i+mmax;
-				tempr = wr*data[j-1] - wi*data[j];
-				tempi = wr * data[j] + wi*data[j-1];
+				tempr = wr * data[j-1] - wi * data[j];
+				tempi = wr * data[j] + wi * data[j-1];
 
 
 				data[j-1] = data[i-1] - tempr;
@@ -71,8 +78,8 @@ void DoFFTInternal(jdouble* data, jint nn) {
 				data[i] += tempi;
 			}
 			wtemp=wr;
-			wr += wr*wpr - wi*wpi;
-			wi += wi*wpr + wtemp*wpi;
+			wr += wr * wpr - wi * wpi;
+			wi += wi * wpr + wtemp * wpi;
 		}
 		mmax=istep;
 	}
@@ -124,4 +131,5 @@ void Java_com_example_AndroidTuner_PitchDetector_DoFFT(
             jint size) {
   jdouble *source_data = env->GetDoubleArrayElements(data, JNI_FALSE);
   DoFFTInternal(source_data, size);
+  env->ReleaseDoubleArrayElements(data, source_data, 0);
 }

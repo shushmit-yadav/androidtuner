@@ -28,7 +28,6 @@ import android.graphics.Paint;
 import android.graphics.Point;
 import android.graphics.Rect;
 
-import com.example.AndroidTuner.PitchDetectionRepresentation;
 import com.example.AndroidTuner.PitchDetector.FreqResult;
 
 public class DrawableView extends View {
@@ -87,8 +86,16 @@ public class DrawableView extends View {
     
     
 	private final static int UI_UPDATE_MS = 50;
+	public double FFTPerSecond = 0;
 
-	
+	protected void drawDebug(Canvas canvas) {
+		final int alpha = 255;
+		Paint paint = new Paint();
+		paint.setARGB(alpha, 200, 200, 250);
+		paint.setTextSize(10);
+		int skip = ((AndroidTunerActivity)getContext()).pd_.skip;
+		canvas.drawText("FFTPS: " + FFTPerSecond + " skip: " + skip, 30, 200, paint);
+	}
 
 	protected void onDraw(Canvas canvas) {
 		final int MARGIN = 20;
@@ -98,11 +105,13 @@ public class DrawableView extends View {
 		final Rect histogramRect = new Rect(MARGIN, effective_height * 60 / 100 + 2 * MARGIN,
                 effective_width + MARGIN, effective_height - MARGIN);
 		
-		Histogram.DrawHistogram(canvas, histogramRect, fr_);
+		Histogram.drawHistogram(canvas, histogramRect, fr_);
 		if (fr_.isPitchDetected) {
-			PitchDrawings.DrawPitchPrecision(canvas, fr_.bestFrequency);
-			PitchDrawings.DrawCurrentFrequency(canvas, 20, 50, fr_.bestFrequency);
-		}		
+			PitchDrawings.drawPitchPrecision(canvas, fr_.bestFrequency);
+			PitchDrawings.drawCurrentFrequency(canvas, 20, 50, fr_.bestFrequency);
+		}
+		
+		drawDebug(canvas);
 	}
 
 	public void setDetectionResults(FreqResult fr) {

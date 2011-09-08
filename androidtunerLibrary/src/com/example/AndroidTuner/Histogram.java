@@ -14,6 +14,7 @@ public class Histogram {
 	//private final static int MAX_AMPLITUDE = 3200000;
 	private final static int MAX_AMPLITUDE = 20000;
 	private final static int MAX_LN_AMP = 30;
+	public static Paint paint = new Paint();
 	
 	private static long GetAmplitudeScreenHeight(Canvas canvas, double amplitude, Rect histogram_rect) {
 		return Math.round(amplitude / MAX_AMPLITUDE * histogram_rect.height());
@@ -21,12 +22,11 @@ public class Histogram {
 	}
 	
 
-	public static boolean DrawHistogram(Canvas canvas, Rect rect, FreqResult fr) {
+	public static boolean drawHistogram(Canvas canvas, Rect rect, FreqResult fr) {
 		if (fr.frequencies == null) {
 			return false;
 		}
 		
-		Paint paint = new Paint();
 		// Draw border.
 		paint.setARGB(80, 200, 200, 200);
 		paint.setStyle(Paint.Style.STROKE);

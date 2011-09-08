@@ -56,6 +56,7 @@ public class AndroidTunerActivity extends Activity {
 			handler_.post(new Runnable() {
 				public void run() {
 					parent_.ShowPitchDetectionResult(fr);
+					tv_.FFTPerSecond = parent_.pd_.FFTPerSecond; 
 				}
 			});
 		}

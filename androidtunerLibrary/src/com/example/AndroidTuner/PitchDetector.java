@@ -28,7 +28,6 @@ import android.util.Log;
 public class PitchDetector implements Runnable {
 	private static String LOG_TAG = "PitchDetector";
 
-	private AudioRecord recorder_;
 	
 	private PitchListener pcl;
 	
@@ -37,19 +36,15 @@ public class PitchDetector implements Runnable {
 	public static final int fftChunkSize = 0x1000;
 	private final static int RATE = 8000;
 	//private final static int RATE = 44100;
-	private final static int CHANNEL_MODE = AudioFormat.CHANNEL_CONFIGURATION_MONO;
-	private final static int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
-
+	
+	
 	private final static int BUFFER_SIZE_IN_MS = 3000;
-	private final static int CHUNK_SIZE_IN_SAMPLES = 4096; // = 2 ^
-															// CHUNK_SIZE_IN_SAMPLES_POW2
-	private final static int CHUNK_SIZE_IN_MS = 1000 * CHUNK_SIZE_IN_SAMPLES
-			/ RATE;
-	private final static int BUFFER_SIZE_IN_BYTES = RATE * BUFFER_SIZE_IN_MS
-			/ 1000 * 2;
-	private final static int CHUNK_SIZE_IN_BYTES = RATE * CHUNK_SIZE_IN_MS
-			/ 1000 * 2;
+	private final static int CHUNK_SIZE_IN_SAMPLES = 4096; // = 2 ^	// CHUNK_SIZE_IN_SAMPLES_POW2
+	private final static int CHUNK_SIZE_IN_MS = 1000 * CHUNK_SIZE_IN_SAMPLES / RATE;
+	private final static int BUFFER_SIZE_IN_BYTES = RATE * BUFFER_SIZE_IN_MS / 1000 * 2;
+	private final static int CHUNK_SIZE_IN_BYTES = RATE * CHUNK_SIZE_IN_MS / 1000 * 2;
 
+	
 	public final static int MIN_FREQUENCY = 49; // 49.0 HZ of G1 - lowest note
 													// for crazy Russian choir.
 	public final static int MAX_FREQUENCY = 1568; // 1567.98 HZ of G6 - highest
@@ -68,6 +63,9 @@ public class PitchDetector implements Runnable {
 	
 	public static double noiseLevel = 40000.0; // should be measured, eg 2e12 is a normal amplitude for singing.
 	public static boolean isNoiseInitialized = false;
+	
+	public static double FFTPerSecond = 0;
+	public int skip = 1;
 
 	public interface PitchListener{
 		public void onAnalysis(FreqResult fr);
@@ -86,24 +84,44 @@ public class PitchDetector implements Runnable {
 		Log.e(LOG_TAG, "starting to detect pitch");
 
 		LinkedBlockingQueue<Integer> samplesReadQueue = new LinkedBlockingQueue<Integer>();
-		RecorderRunnable recRun = new RecorderRunnable(samplesReadQueue);
+		RecorderRunnable recRun = new RecorderRunnable(samplesReadQueue, RATE, fftChunkSize, pcl);
 		Thread recThread = new Thread(recRun);
 		recThread.start();
 		
+		short[] audioBuffer;
+		//audioBuffer = new short[fftChunkSize];
+		skip = 800;
+		long startTime;
+		int leftOver = 0;
+		int lastLeftOver = 0;
 		while (!Thread.interrupted()) {
+			startTime = SystemClock.elapsedRealtime();
 			//short[] audio_data = new short[BUFFER_SIZE_IN_BYTES / 2];
 			//recorder_.read(audio_data, 0, CHUNK_SIZE_IN_BYTES / 2);
 			//short[] audio_data = new short[CHUNK_SIZE_IN_BYTES / 2];
 			// 4096=0x1000, 8192=0x2000
 			//short[] audio_data = new short[0x1000];
-			short[] audioData;
+			
 			try {
-				audioData = recRun.getLatest(fftChunkSize);
+				audioBuffer = recRun.getLatest(fftChunkSize);
+				//leftOver = recRun.get(audioBuffer, skip, fftChunkSize);
 			} catch (InterruptedException e) {
 				Log.e(LOG_TAG, "InterruptedException for getting audio data.");
 				e.printStackTrace();
 				break;
 			}
+			
+			/*if (leftOver > lastLeftOver) {
+				// catch up!
+				skip += 10;
+			} else {
+				// you're ahead, do more fft's.
+				skip -= 10;
+				if (skip < 100) {
+					skip = 100;
+				}
+			}
+			lastLeftOver = leftOver;*/
 			
 			// NOTE: It's critical get only the newest samples here. Otherwise
 			// we could accidentally thrash insanely fast if the recorder_ was on for too long.
@@ -118,10 +136,9 @@ public class PitchDetector implements Runnable {
 			//long prerecTime = SystemClock.elapsedRealtime();
 			
 			//short [] subArray = Arrays.copyOfRange(audio_data, 4, 6);
-			//long startTime = SystemClock.elapsedRealtime();
-			
-			FreqResult fr = AnalyzeFrequencies(audioData);
+			FreqResult fr = AnalyzeFrequencies(audioBuffer);
 			this.pcl.onAnalysis(fr);
+			FFTPerSecond = 1000 / (SystemClock.elapsedRealtime() - startTime);
 			
 			//Log.e(LOG_TAG, "calced in: " + (SystemClock.elapsedRealtime() - startTime) + " " + (SystemClock.elapsedRealtime() - prerecTime));
 		}
@@ -131,111 +148,6 @@ public class PitchDetector implements Runnable {
 	}	
 	
 	
-	public class RecorderRunnable implements Runnable {
-		public final int maxTime = 60; // in seconds
-		public final int totalSamples = maxTime * RATE;
-		public final int readSamples = 0x400;
-		
-		private short[] audioData;
-		private int filled;
-		private ReentrantLock audioReadLock;
-		
-		private BlockingQueue<Integer> queue;
-		
-		public short[] getLatest(int howMany) throws InterruptedException {
-			// wait so you get something new and not something old twice.
-			queue.take();
-			
-			if (filled < howMany) {
-				while (true) {
-					queue.take();
-					if (filled >= howMany) {
-						// got enough stuff to give back.
-						break;
-					}
-				}
-			}
-			
-			// empty the queue now so we don't have it fill up needlessly.
-			// A better solution would be a lock and not a queue, maybe a TODO.
-			while(null != queue.poll()) {
-				
-			}
-			
-			short[] audioBuffer = new short[howMany];
-			
-			audioReadLock.lock();
-		     try {
-				System.arraycopy(audioData, filled - howMany, audioBuffer, 0, howMany);
-		     } finally {
-		    	 audioReadLock.unlock();
-		     }
-			return audioBuffer;
-		}
-		
-		public RecorderRunnable(BlockingQueue<Integer> queue_) {
-			super();
-			queue = queue_;
-			
-			audioReadLock = new ReentrantLock();
-		}
-		
-		public void reset() {
-			audioReadLock.lock();
-		     try {
-		         // fill yourself from the end
-		    	 System.arraycopy(audioData, filled - fftChunkSize, audioData, 0, fftChunkSize);
-		    	 filled = fftChunkSize;
-		     } finally {
-		    	 audioReadLock.unlock();
-		     }
-		}
-		
-		@Override
-		public void run() {
-			int res;
-			filled = 0;
-			audioData = new short[totalSamples];
-			
-			android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
-			
-			recorder_ = new AudioRecord(AudioSource.MIC, RATE, CHANNEL_MODE,
-					ENCODING, 6144);
-			
-			if (recorder_.getState() != AudioRecord.STATE_INITIALIZED) {
-				PitchDetector.this.pcl.onError("Can't initialize AudioRecord");
-				return;
-			}
-			
-			recorder_.startRecording();
-			try {
-				while (!Thread.interrupted()) {
-					if (readSamples + filled > totalSamples) {
-						reset();
-					}
-					
-					//res = recorder_.read(audio_data, 0, audio_data.length);
-					res = recorder_.read(audioData, filled, readSamples);
-					if (res == AudioRecord.ERROR_INVALID_OPERATION) {
-						Log.e(LOG_TAG, "audio record failed...");
-						PitchDetector.this.pcl.onError("failed reading audio");
-						return;
-					}
-					
-					filled += res;
-					queue.put(res);
-					
-				}
-			} catch (InterruptedException e) {
-				Log.e(LOG_TAG, "recording interrupted");
-				e.printStackTrace();
-			} finally {
-				Log.e(LOG_TAG, "RecorderRunnable interrupted.");
-				recorder_.stop();
-			}
-		}
-		
-	}	
 
 	
 	public static class FreqResult {
@@ -312,6 +224,8 @@ public class PitchDetector implements Runnable {
 		}
 	}
 	
+	public long lastFft;
+	
 	public static FreqResult AnalyzeFrequencies(short[] audio_data) {
 		FreqResult fr = new FreqResult();
 
@@ -379,12 +293,17 @@ public class PitchDetector implements Runnable {
 			
 			
 			// find peaks
+			// NOTE: this finds all the relevant peaks because their
+			//		amplitude usually keeps rising with the frequency.
 			if (normalized_amplitude > best_amplitude) {
+				
+				// it's important to note the best_amplitude also for noise level measurement.
 				best_frequency = current_frequency;
 				best_amplitude = normalized_amplitude;
 				
 				// make sure this isn't the 48.44970703125 FFT artifact
-				if (current_frequency > MIN_FREQUENCY) {
+				// and that this isn't some background noise
+				if ((current_frequency > MIN_FREQUENCY)  && (normalized_amplitude > noiseLevel)) {
 					bestFrequencies.add(current_frequency);
 					bestAmps.add(best_amplitude);
 				}

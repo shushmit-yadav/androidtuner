@@ -4,7 +4,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 
 public class PitchDrawings {
-	public static void DrawCurrentFrequency(Canvas canvas, int x, int y, double pitch) {
+	public static void drawCurrentFrequency(Canvas canvas, int x, int y, double pitch) {
 		final int alpha = 255;
 		Paint paint = new Paint();
 		paint.setARGB(alpha, 200, 200, 250);
@@ -33,7 +33,7 @@ public class PitchDrawings {
 		return pitchMistake;
 	}
 
-	public static void DrawPitchPrecision(Canvas canvas, double pitch) {
+	public static void drawPitchPrecision(Canvas canvas, double pitch) {
 		final int tuneNeedleY = 150;
 		final int tuneHairRadius = 20;
 		Paint notePaint = new Paint();

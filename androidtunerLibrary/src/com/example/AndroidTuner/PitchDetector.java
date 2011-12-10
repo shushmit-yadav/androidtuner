@@ -1,20 +1,14 @@
-/** Copyright (C) 2009 by Aleksey Surkov.
- **
- ** Permission to use, copy, modify, and distribute this software and its
- ** documentation for any purpose and without fee is hereby granted, provided
- ** that the above copyright notice appear in all copies and that both that
- ** copyright notice and this permission notice appear in supporting
- ** documentation.  This software is provided "as is" without express or
- ** implied warranty.
- */
 
 package com.example.AndroidTuner;
 
 import java.lang.Runnable;
 import java.lang.Thread;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.ReentrantLock;
@@ -28,8 +22,7 @@ import android.util.Log;
 public class PitchDetector implements Runnable {
 	private static String LOG_TAG = "PitchDetector";
 
-	
-	private PitchListener pcl;
+	private PitchListener mPitchListener;
 	
 	// Currently, only this combination of rate, encoding and channel mode
 	// actually works.
@@ -55,14 +48,16 @@ public class PitchDetector implements Runnable {
 	
 	private final static int DRAW_FREQUENCY_STEP = 5;
 	
-	public final static String[] notes = {"a", "a#", "b", "c", "c#", "d", "d#", "e", "f", "f#", "g", "g#"};
 	
 	public static native void DoFFT(double[] data, int size); // an NDK library
 														// 'fft-jni'
 	
+	// measured by yelling in to the mic
+	public static double MAX_AMPLITUDE = 1.2e5;
 	
-	public static double noiseLevel = 40000.0; // should be measured, eg 2e12 is a normal amplitude for singing.
-	public static boolean isNoiseInitialized = false;
+	// this first noise value is ignored, eg 2e12 is a normal amplitude for singing.
+	public static double noiseLevel = 4e4;
+	public static boolean mIsNoiseInitialized = false;
 	
 	public static double FFTPerSecond = 0;
 	public int skip = 1;
@@ -74,18 +69,21 @@ public class PitchDetector implements Runnable {
 	
 	public PitchDetector(PitchListener pcl) {
 		super();
-		this.pcl = pcl;
+		this.mPitchListener = pcl;
 		System.loadLibrary("fft-jni");
 	}
 
 
+	public void resetNoiseLevel() {
+		mIsNoiseInitialized = false;
+	}
 	
 	public void run() {
 		Log.e(LOG_TAG, "starting to detect pitch");
 
 		LinkedBlockingQueue<Integer> samplesReadQueue = new LinkedBlockingQueue<Integer>();
-		RecorderRunnable recRun = new RecorderRunnable(samplesReadQueue, RATE, fftChunkSize, pcl);
-		Thread recThread = new Thread(recRun);
+		RecorderRunnable recorder = new RecorderRunnable(samplesReadQueue, RATE, fftChunkSize, mPitchListener);
+		Thread recThread = new Thread(recorder);
 		recThread.start();
 		
 		short[] audioBuffer;
@@ -103,7 +101,7 @@ public class PitchDetector implements Runnable {
 			//short[] audio_data = new short[0x1000];
 			
 			try {
-				audioBuffer = recRun.getLatest(fftChunkSize);
+				audioBuffer = recorder.getLatest(fftChunkSize);
 				//leftOver = recRun.get(audioBuffer, skip, fftChunkSize);
 			} catch (InterruptedException e) {
 				Log.e(LOG_TAG, "InterruptedException for getting audio data.");
@@ -137,7 +135,7 @@ public class PitchDetector implements Runnable {
 			
 			//short [] subArray = Arrays.copyOfRange(audio_data, 4, 6);
 			FreqResult fr = AnalyzeFrequencies(audioBuffer);
-			this.pcl.onAnalysis(fr);
+			this.mPitchListener.onAnalysis(fr);
 			FFTPerSecond = 1000 / (SystemClock.elapsedRealtime() - startTime);
 			
 			//Log.e(LOG_TAG, "calced in: " + (SystemClock.elapsedRealtime() - startTime) + " " + (SystemClock.elapsedRealtime() - prerecTime));
@@ -153,6 +151,7 @@ public class PitchDetector implements Runnable {
 	public static class FreqResult {
 		public HashMap<Double, Double> frequencies;
 		public double bestFrequency;
+		public double maxAmp;
 		public boolean isPitchDetected;
 		public double noiseLevel;
 		
@@ -161,6 +160,7 @@ public class PitchDetector implements Runnable {
 			this.bestFrequency = 0.0;
 			this.isPitchDetected = false;
 			this.noiseLevel = 0.0;
+
 		}
 		
 //		
@@ -224,50 +224,51 @@ public class PitchDetector implements Runnable {
 		}
 	}
 	
-	public long lastFft;
-	
-	public static FreqResult AnalyzeFrequencies(short[] audio_data) {
-		FreqResult fr = new FreqResult();
-
+	public FreqResult AnalyzeFrequencies(short[] audio_data) {
 		if (audio_data.length * 2 < 0) {
 			Log.e(LOG_TAG, "awkward fail: " + (audio_data.length * 2));
 		}
 		
-		double[] data = new double[audio_data.length * 2];
+		double[] frequencyData = new double[audio_data.length * 2];
 		
 		//final int min_frequency_fft = Math.round(MIN_FREQUENCY * CHUNK_SIZE_IN_SAMPLES / RATE);
 		//final int max_frequency_fft = Math.round(MAX_FREQUENCY * CHUNK_SIZE_IN_SAMPLES / RATE);
 		
-		final int min_frequency_fft = (int) Math.round(1.0 * MIN_FREQUENCY * audio_data.length / RATE);
-		final int max_frequency_fft = (int) Math.round(1.0 * MAX_FREQUENCY * audio_data.length / RATE);
-
 		
 		// TODO: Somewhere in this for loop there's a crash!
 		//for (int i = 0; i < CHUNK_SIZE_IN_SAMPLES; i++) {
 		for (int i = 0; i < audio_data.length; i++) {
-			data[i * 2] = audio_data[i];
-			data[i * 2 + 1] = 0;
+			frequencyData[i * 2] = audio_data[i];
+			frequencyData[i * 2 + 1] = 0;
 		}
 		
 		
 		//DoFFT(data, CHUNK_SIZE_IN_SAMPLES);
-		DoFFT(data, audio_data.length);
+		DoFFT(frequencyData, audio_data.length);
 		
 		
+		return AnalyzeFFT(audio_data.length, frequencyData);
+	}
+	
+	public FreqResult AnalyzeFFT(int audioDataLength, double[] frequencyData) {
 		boolean pitchDetected = false;
 		double best_frequency = 0;
-		double best_amplitude = 0;
+		double bestAmplitude = 0;
 		HashMap<Double, Double> frequencies = new HashMap<Double, Double>();
-		
 		List<Double> bestFrequencies = new ArrayList<Double>();
 		List<Double> bestAmps = new ArrayList<Double>();
 		
-		//final double normalFreqAmp = Math.pow(MIN_FREQUENCY * MAX_FREQUENCY, 0.5);
+		FreqResult fr = new FreqResult();
+
+		// final double normalFreqAmp = Math.pow(MIN_FREQUENCY * MAX_FREQUENCY, 0.5);
+		final int min_frequency_fft = (int) Math.round(1.0 * MIN_FREQUENCY * audioDataLength / RATE);
+		final int max_frequency_fft = (int) Math.round(1.0 * MAX_FREQUENCY * audioDataLength / RATE);
+
 		
 		for (int i = min_frequency_fft; i <= max_frequency_fft; i++) {
 
-			final double current_frequency = i * 1.0 * RATE
-					/ audio_data.length;
+			final double currentFrequency = i * 1.0 * RATE
+					/ audioDataLength;
 			
 			// round to nearest DRAW_FREQUENCY_STEP (eg 63/64/65 -> 65 hz)
 			//final double draw_frequency = Math
@@ -275,11 +276,11 @@ public class PitchDetector implements Runnable {
 			//				/ DRAW_FREQUENCY_STEP)
 			//		* DRAW_FREQUENCY_STEP;
 
-			final double current_amplitude = Math.pow(data[i * 2], 2)
-					+ Math.pow(data[i * 2 + 1], 2);
+			final double current_amplitude = Math.pow(frequencyData[i * 2], 2)
+					+ Math.pow(frequencyData[i * 2 + 1], 2);
 			
 			//final double normalized_amplitude = current_amplitude * normalFreqAmp / current_frequency;
-			final double normalized_amplitude = Math.pow(current_amplitude, 0.5) / current_frequency;
+			final double normalizedAmplitude = Math.pow(current_amplitude, 0.5) / currentFrequency;
 
 			// divide the amps to bins for drawing later
 			//Double current_sum_for_this_slot = frequencies.get(draw_frequency);
@@ -289,23 +290,23 @@ public class PitchDetector implements Runnable {
 			
 			//frequencies.put(draw_frequency, Math.pow(current_amplitude, 0.5) / draw_frequency_step + current_sum_for_this_slot);
 			//frequencies.put(draw_frequency, normalized_amplitude / DRAW_FREQUENCY_STEP + current_sum_for_this_slot);
-			frequencies.put(current_frequency, normalized_amplitude);
+			frequencies.put(currentFrequency, normalizedAmplitude);
 			
 			
 			// find peaks
 			// NOTE: this finds all the relevant peaks because their
 			//		amplitude usually keeps rising with the frequency.
-			if (normalized_amplitude > best_amplitude) {
+			if (normalizedAmplitude > bestAmplitude) {
 				
 				// it's important to note the best_amplitude also for noise level measurement.
-				best_frequency = current_frequency;
-				best_amplitude = normalized_amplitude;
+				best_frequency = currentFrequency;
+				bestAmplitude = normalizedAmplitude;
 				
 				// make sure this isn't the 48.44970703125 FFT artifact
 				// and that this isn't some background noise
-				if ((current_frequency > MIN_FREQUENCY)  && (normalized_amplitude > noiseLevel)) {
-					bestFrequencies.add(current_frequency);
-					bestAmps.add(best_amplitude);
+				if ((currentFrequency > MIN_FREQUENCY)  && (normalizedAmplitude > noiseLevel)) {
+					bestFrequencies.add(currentFrequency);
+					bestAmps.add(bestAmplitude);
 				}
 			}
 			// test for harmonics
@@ -320,24 +321,29 @@ public class PitchDetector implements Runnable {
 		best_frequency = clusterFrequencies(bestFrequencies, bestAmps);
 		
 		
-		if ( (best_amplitude > noiseLevel) && (best_frequency > 0)) {
+		if ( (bestAmplitude > noiseLevel) && (best_frequency > 0)) {
 			pitchDetected = true;
 		}
 		
-		if ( ! isNoiseInitialized) {
+		if ( ! mIsNoiseInitialized) {
 			// the first sample + 50% means we catch some jitter in the noise amplitude too.
-			noiseLevel = best_amplitude * 1.5;
-			isNoiseInitialized = true;
+			noiseLevel = bestAmplitude * 1.5;
+			mIsNoiseInitialized = true;
+			if (noiseLevel > MAX_AMPLITUDE / 2) {
+				noiseLevel = MAX_AMPLITUDE / 2;
+				mPitchListener.onError("Noise levels are too high.");
+			}
 		}
 		
 		fr.bestFrequency = best_frequency;
 		fr.frequencies = frequencies;
 		fr.isPitchDetected = pitchDetected;
 		fr.noiseLevel = noiseLevel;
+		fr.maxAmp = bestAmplitude;
 		
 		//data = null;
 		//System.gc();
-		return fr;
+		return fr;		
 	}
 
 	public static double clusterFrequencies(List<Double> bestFrequencies, List<Double> bestAmps) {
@@ -374,7 +380,7 @@ public class PitchDetector implements Runnable {
 		
 		
 		// join harmonies
-		// there should be only 6-10 peaks, so this isn't too bad that it's O(n²)
+		// there should be only 6-10 peaks, so this isn't too bad that it's O(nï¿½)
 		List<FrequencyCluster> harmonies = new ArrayList<FrequencyCluster>();
 		FrequencyCluster nextCluster;
 		for(int i = 0; i < clusters.size(); i ++) {
@@ -411,25 +417,16 @@ public class PitchDetector implements Runnable {
 		return bestFrequency;
 	}
 
-	public static double distanceFromA4(double frequency) {
-		return Math.log(frequency / 440) * 12 / Math.log(2);
-	}
 	
-	public static String distanceFromA4ToNote(double distanceFromA4) {
-		int noteIndex = (int) (Math.round(distanceFromA4) % 12);
-		// 440 Hz is A4 and there are 9 half-steps from C4 to A4
-		long octaveNumber = 4 + (long) Math.floor( (9.0 + Math.round(distanceFromA4)) / 12.0);
-		if (noteIndex < 0) {
-			// to avoid negative noteindex
-			noteIndex += 12;
-		}
-		
-		return notes[noteIndex] + octaveNumber;
-	}
-	
-	public static String HzToNote(double frequency) {
-		// distance in half-steps
-		double distanceFromA4 = distanceFromA4(frequency);
-		return distanceFromA4ToNote(distanceFromA4);
-	}
 }
+
+
+/** Copyright (C) 2009 by Aleksey Surkov.
+ **
+ ** Permission to use, copy, modify, and distribute this software and its
+ ** documentation for any purpose and without fee is hereby granted, provided
+ ** that the above copyright notice appear in all copies and that both that
+ ** copyright notice and this permission notice appear in supporting
+ ** documentation.  This software is provided "as is" without express or
+ ** implied warranty.
+ */

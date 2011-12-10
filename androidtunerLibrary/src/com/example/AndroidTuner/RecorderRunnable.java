@@ -20,12 +20,12 @@ public class RecorderRunnable implements Runnable {
 	public final int totalSamples;
 	public final int fftChunkSize;
 	public int rate;
-	public PitchListener pcl_;
+	public PitchListener mPitchListener;
 	
-	private short[] audioData;
+	private short[] mAudioData;
 	private int filled;
 	private ReentrantLock audioReadLock;
-	private AudioRecord recorder_;
+	private AudioRecord mRecorder;
 	
 	private BlockingQueue<Integer> queue;
 	
@@ -38,7 +38,7 @@ public class RecorderRunnable implements Runnable {
 		this.rate = rate;
 		this.fftChunkSize = fftChunkSize;
 		lastReadIndex = 0;
-		pcl_ = pcl;
+		mPitchListener = pcl;
 		
 		audioReadLock = new ReentrantLock();
 	}
@@ -62,7 +62,7 @@ public class RecorderRunnable implements Runnable {
 		// NOTE: if the lock was taken between here and above it's ok.
 		audioReadLock.lock();
 		try {
-			System.arraycopy(audioData, lastReadIndex, buffer, 0,
+			System.arraycopy(mAudioData, lastReadIndex, buffer, 0,
 					howMany);
 		} finally {
 			audioReadLock.unlock();
@@ -77,7 +77,7 @@ public class RecorderRunnable implements Runnable {
 
 		audioReadLock.lock();
 		try {
-			System.arraycopy(audioData, filled - howMany, audioBuffer, 0,
+			System.arraycopy(mAudioData, filled - howMany, audioBuffer, 0,
 					howMany);
 		} finally {
 			audioReadLock.unlock();
@@ -114,7 +114,7 @@ public class RecorderRunnable implements Runnable {
 		audioReadLock.lock();
 	     try {
 	         // fill yourself from the end
-	    	 System.arraycopy(audioData, filled - fftChunkSize, audioData, 0, fftChunkSize);
+	    	 System.arraycopy(mAudioData, filled - fftChunkSize, mAudioData, 0, fftChunkSize);
 	    	 filled = fftChunkSize;
 	    	 lastReadIndex = 0;
 	     } finally {
@@ -122,53 +122,73 @@ public class RecorderRunnable implements Runnable {
 	     }
 	}
 	
-	@Override
-	public void run() {
+	public boolean readLoop() throws InterruptedException {
 		int res;
-		filled = 0;
-		audioData = new short[totalSamples];
-		
-		android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
-		
-		recorder_ = new AudioRecord(AudioSource.MIC, rate, CHANNEL_MODE,
-				ENCODING, 6144);
-		
-		if (recorder_.getState() != AudioRecord.STATE_INITIALIZED) {
-			pcl_.onError("Can't initialize AudioRecord");
-			return;
-		}
-		
-		recorder_.startRecording();
-		try {
-			while (!Thread.interrupted()) {
-				if (readSamples + filled > totalSamples) {
-					reset();
-				}
-				
-				//res = recorder_.read(audio_data, 0, audio_data.length);
-				res = recorder_.read(audioData, filled, readSamples);
-				if((res == AudioRecord.ERROR_INVALID_OPERATION) || (res == AudioRecord.ERROR_BAD_VALUE)) {
-					Log.e(LOG_TAG, "audio record failed: " + res);
-					pcl_.onError("failed reading audio");
-					return;
-				}
-				
-				if (res == 0) {
-					pcl_.onError("failed reading audio zero buffer");
-					return;
-				}
-				
-				filled += res;
-				queue.put(res);
-				
+		while (!Thread.interrupted()) {
+			if (filled + readSamples > totalSamples) {
+				reset();
 			}
-		} catch (InterruptedException e) {
-			Log.e(LOG_TAG, "recording interrupted");
-			e.printStackTrace();
-		} finally {
-			Log.e(LOG_TAG, "RecorderRunnable interrupted.");
-			recorder_.stop();
+			
+			//res = recorder_.read(audio_data, 0, audio_data.length);
+			res = mRecorder.read(mAudioData, filled, readSamples);
+			if((res == AudioRecord.ERROR_INVALID_OPERATION) || (res == AudioRecord.ERROR_BAD_VALUE)) {
+				Log.e(LOG_TAG, "audio record failed: " + res);
+				mPitchListener.onError("failed reading audio");
+				return false;
+			}
+			
+			if (res == 0) {
+				//mPitchListener.onError("failed reading audio zero buffer");
+				//return;
+				Log.e(LOG_TAG, "audio record failed reading - zero buffer");
+				Thread.sleep(1000);
+				return true;
+			}
+			
+			filled += res;
+			queue.put(res);
+			
 		}
+		
+		return false;
 	}
 	
+	@Override
+	public void run() {
+		boolean retry = true;
+		int retriesLeft = 5;
+		
+		while(retry && (retriesLeft > 0)) {
+			retry = false;
+			retriesLeft -= 1;
+			filled = 0;
+			mAudioData = new short[totalSamples];
+			
+			android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
+			
+			mRecorder = new AudioRecord(AudioSource.MIC, rate, CHANNEL_MODE,
+					ENCODING, readSamples);
+			
+			if (mRecorder.getState() != AudioRecord.STATE_INITIALIZED) {
+				mPitchListener.onError("Can't initialize AudioRecord");
+				return;
+			}
+			
+			mRecorder.startRecording();
+			try {
+				retry = readLoop();
+			} catch (InterruptedException e) {
+				Log.e(LOG_TAG, "recording interrupted");
+				e.printStackTrace();
+				return;
+			} finally {
+				Log.e(LOG_TAG, "RecorderRunnable interrupted.");
+				mRecorder.stop();
+			}
+		}
+		
+		if(retriesLeft == 0) {
+			mPitchListener.onError("failed reading audio zero buffer");
+		}
+	}	
 }	

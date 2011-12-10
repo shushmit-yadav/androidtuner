@@ -94,7 +94,7 @@ public class DrawableView extends View {
 		paint.setARGB(alpha, 200, 200, 250);
 		paint.setTextSize(10);
 		int skip = ((AndroidTunerActivity)getContext()).pd_.skip;
-		canvas.drawText("FFTPS: " + FFTPerSecond + " skip: " + skip, 30, 200, paint);
+		canvas.drawText("FFT per second: " + FFTPerSecond, 30, 200, paint); // + " skip: " + skip, 
 	}
 
 	protected void onDraw(Canvas canvas) {
@@ -108,7 +108,7 @@ public class DrawableView extends View {
 		Histogram.drawHistogram(canvas, histogramRect, fr_);
 		if (fr_.isPitchDetected) {
 			PitchDrawings.drawPitchPrecision(canvas, fr_.bestFrequency);
-			PitchDrawings.drawCurrentFrequency(canvas, 20, 50, fr_.bestFrequency);
+			PitchDrawings.drawCurrentFrequency(canvas, canvas.getWidth() / 2, 50, fr_.bestFrequency);
 		}
 		
 		drawDebug(canvas);

@@ -2,16 +2,20 @@ package com.example.AndroidTuner;
 
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Paint.Align;
 
 public class PitchDrawings {
 	public static void drawCurrentFrequency(Canvas canvas, int x, int y, double pitch) {
 		final int alpha = 255;
 		Paint paint = new Paint();
 		paint.setARGB(alpha, 200, 200, 250);
+		paint.setTextAlign(Align.CENTER);
 		paint.setTextSize(35);
+		canvas.drawText(Music.hzToNoteName(pitch), x, y, paint);
+		
+		paint.setTextSize(10);
 		final double pitchLessAccurate = Math.round(pitch * 10) / 10.0;
-		canvas.drawText(pitchLessAccurate + " Hz ", x, y, paint);
-		canvas.drawText(PitchDetector.HzToNote(pitch), x, y + 40, paint);
+		canvas.drawText(pitchLessAccurate + " Hz ", x, y + 40, paint);
 	}
 	
 	public static void PitchMistakeColor(Paint paint, double pitchMistake) {
@@ -28,7 +32,7 @@ public class PitchDrawings {
 	}
 	
 	public static double PitchMistake(double pitch) {
-		final double distanceFromA4 = PitchDetector.distanceFromA4(pitch);
+		final double distanceFromA4 = Music.distanceFromA4(pitch);
 		final double pitchMistake = distanceFromA4 - Math.round(distanceFromA4);
 		return pitchMistake;
 	}

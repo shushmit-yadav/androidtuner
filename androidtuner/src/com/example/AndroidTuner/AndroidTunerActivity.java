@@ -19,10 +19,16 @@ import com.example.AndroidTuner.PitchDetector.FreqResult;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
+import android.view.WindowManager;
 
 public class AndroidTunerActivity extends Activity {
 	
@@ -42,7 +48,31 @@ public class AndroidTunerActivity extends Activity {
 		//tv_ = new DrawableView(this);
 		//setContentView(tv_);
 	}
+	
+	
 
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+	    MenuInflater inflater = getMenuInflater();
+	    inflater.inflate(R.menu.tuner_menu, menu);
+	    return true;
+	}
+	
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		switch (item.getItemId()) {
+		case R.id.project_page:
+			Intent i = new Intent(Intent.ACTION_VIEW);  
+			i.setData(Uri.parse("http://code.google.com/p/androidtuner/"));  
+			startActivity(i);
+			break;
+		case R.id.recalibrate_noise:
+			pd_.resetNoiseLevel();
+			break;
+		}
+		return true;
+	}
+	
 	public class GuiPitchListener implements PitchDetector.PitchListener {
 		private AndroidTunerActivity parent_;
 		private Handler handler_;
@@ -64,15 +94,17 @@ public class AndroidTunerActivity extends Activity {
 		private void ShowError(final String msg) {
 			handler_.post(new Runnable() {
 				public void run() {
-					new AlertDialog.Builder(parent_).setTitle("GuitarTuner")
-							.setMessage(msg).show();
+					new AlertDialog.Builder(parent_).setTitle("Android Tuner Error")
+							.setMessage(msg)
+							.setTitle("Error")
+							.setPositiveButton("OK", null)
+							.show();
 				}
 			});
 		}
 
 		@Override
 		public void onAnalysis(FreqResult fr) {
-			// TODO Auto-generated method stub
 			PostToUI(fr);
 		}
 
@@ -90,12 +122,15 @@ public class AndroidTunerActivity extends Activity {
 		pd_ = new PitchDetector(gpl_);
 		pitch_detector_thread_ = new Thread(pd_);
 		pitch_detector_thread_.start();
+		
+		setKeepScreenOn(this, true);
 	}
 
 	@Override
 	public void onStop() {
 		super.onStop();
 		pitch_detector_thread_.interrupt();
+		setKeepScreenOn(this, false);
 	}
 
 	@Override
@@ -107,4 +142,18 @@ public class AndroidTunerActivity extends Activity {
 	public void ShowPitchDetectionResult(FreqResult fr) {
 		tv_.setDetectionResults(fr);
 	}
+	
+	
+	
+	public void setKeepScreenOn(Activity activity, boolean keepScreenOn) {
+		if (keepScreenOn) {
+			activity.getWindow().addFlags(
+					WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+		} else {
+			activity.getWindow().clearFlags(
+					WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+		}
+	}
+	
+	
 }

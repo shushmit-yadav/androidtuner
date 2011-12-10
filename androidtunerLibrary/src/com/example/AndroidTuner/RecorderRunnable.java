@@ -15,6 +15,7 @@ public class RecorderRunnable implements Runnable {
 	
 	public final int maxTime = 60; // in seconds
 	public final int readSamples = 0x100;
+	public final int BUFFER_SIZE = 0x1000;
 	private final static int CHANNEL_MODE = AudioFormat.CHANNEL_CONFIGURATION_MONO;
 	private final static int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
 	public final int totalSamples;
@@ -167,7 +168,7 @@ public class RecorderRunnable implements Runnable {
 			android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
 			
 			mRecorder = new AudioRecord(AudioSource.MIC, rate, CHANNEL_MODE,
-					ENCODING, readSamples);
+					ENCODING, BUFFER_SIZE);
 			
 			if (mRecorder.getState() != AudioRecord.STATE_INITIALIZED) {
 				mPitchListener.onError("Can't initialize AudioRecord");

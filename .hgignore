@@ -1,2 +1,5 @@
 syntax: glob
 androidtunerTest/tmp/
+androidtuner/bin/*
+androidtunerLibrary/bin/*
+androidtunerTest/bin/*

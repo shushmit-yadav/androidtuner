@@ -20,7 +20,7 @@ public class RecorderRunnable implements Runnable {
 	private final static int ENCODING = AudioFormat.ENCODING_PCM_16BIT;
 	public final int totalSamples;
 	public final int fftChunkSize;
-	public int rate;
+	public int mRate;
 	public PitchListener mPitchListener;
 	
 	private short[] mAudioData;
@@ -36,7 +36,7 @@ public class RecorderRunnable implements Runnable {
 		super();
 		queue = queue_;
 		totalSamples = maxTime * rate;
-		this.rate = rate;
+		this.mRate = rate;
 		this.fftChunkSize = fftChunkSize;
 		lastReadIndex = 0;
 		mPitchListener = pcl;
@@ -142,7 +142,7 @@ public class RecorderRunnable implements Runnable {
 				//mPitchListener.onError("failed reading audio zero buffer");
 				//return;
 				Log.e(LOG_TAG, "audio record failed reading - zero buffer");
-				Thread.sleep(1000);
+				Thread.sleep(500);
 				return true;
 			}
 			
@@ -166,9 +166,14 @@ public class RecorderRunnable implements Runnable {
 			mAudioData = new short[totalSamples];
 			
 			android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_URGENT_AUDIO);
-			
-			mRecorder = new AudioRecord(AudioSource.MIC, rate, CHANNEL_MODE,
-					ENCODING, BUFFER_SIZE);
+			int bufferSize = BUFFER_SIZE;
+			int minBufferSize = AudioRecord.getMinBufferSize(mRate, CHANNEL_MODE, ENCODING);
+			if (minBufferSize > bufferSize) {
+				bufferSize = minBufferSize;
+			}
+			Log.d(LOG_TAG, "recording buffer size: " + bufferSize);
+			mRecorder = new AudioRecord(AudioSource.MIC, mRate, CHANNEL_MODE,
+					ENCODING, bufferSize);
 			
 			if (mRecorder.getState() != AudioRecord.STATE_INITIALIZED) {
 				mPitchListener.onError("Can't initialize AudioRecord");
@@ -179,12 +184,13 @@ public class RecorderRunnable implements Runnable {
 			try {
 				retry = readLoop();
 			} catch (InterruptedException e) {
-				Log.e(LOG_TAG, "recording interrupted");
+				Log.d(LOG_TAG, "recording interrupted.");
 				e.printStackTrace();
 				return;
 			} finally {
-				Log.e(LOG_TAG, "RecorderRunnable interrupted.");
+				Log.d(LOG_TAG, "RecorderRunnable stopping recording.");
 				mRecorder.stop();
+				mRecorder.release();
 			}
 		}
 		
